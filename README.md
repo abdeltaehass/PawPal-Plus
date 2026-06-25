@@ -32,7 +32,7 @@ The system is split into two layers:
 | Layer            | File                | Responsibility                                  |
 | ---------------- | ------------------- | ----------------------------------------------- |
 | **Logic layer**  | `pawpal_system.py`  | OOP domain model + scheduling algorithms        |
-| **UI layer**     | _Streamlit app_     | Thin presentation layer over the logic (later)  |
+| **UI layer**     | `app.py` (Streamlit)| Thin presentation layer that delegates to logic |
 
 This is a **CLI-first** project: the backend logic in `pawpal_system.py` is
 designed and verified independently (via a demo script and `pytest`) before any
@@ -60,6 +60,9 @@ pip install -r requirements.txt
 
 # run the CLI demo
 python main.py
+
+# launch the web app
+streamlit run app.py
 
 # run the tests
 python -m pytest
@@ -101,10 +104,8 @@ Marked done: ✓  7:30 AM  Morning walk (walk)  [Rex]  ↻daily
 
 - [x] **Phase 1** — System design (UML + class skeletons)
 - [x] **Phase 2** — OOP logic, CLI demo, and initial tests
-- [ ] Phase 3 — Scheduling algorithms (sort, conflicts, recurrence)
-- [ ] Phase 4 — CLI demo + pytest suite
-- [ ] Phase 5 — Streamlit UI
-- [ ] Phase 6 — Polish, final UML, reflection
+- [x] **Phase 3** — Streamlit UI (`app.py`) wired to the logic layer
+- [ ] Next — refinements, final UML, and reflection
 
 ## Design reflections
 

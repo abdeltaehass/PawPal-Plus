@@ -96,7 +96,26 @@ tasks are flagged) — all passing.
 
 
 
-## Phase 3 — _(pending)_
+## Phase 3 — Wiring the Streamlit UI to the logic
+
+The UI (`app.py`) is a thin layer; all behaviour lives in `pawpal_system`.
+
+- **Imports.** `app.py` imports `Owner`, `Pet`, `Task`, the three enums, and
+  `Scheduler` from `pawpal_system` — no domain logic is duplicated in the UI.
+- **Persistence via `st.session_state`.** Streamlit reruns the whole script on
+  every interaction, so a fresh `Owner()` at the top would wipe the data each
+  click. I guard it with `if "owner" not in st.session_state`, so a single
+  `Owner` lives across reruns and accumulates pets/tasks.
+- **Wiring actions to methods.** The "Add a Pet" form calls `owner.add_pet(...)`;
+  the "Schedule a Task" form calls `pet.add_task(...)`; "Today's Schedule" is
+  rendered from `Scheduler.from_owner(owner).today()` and conflicts from
+  `detect_conflicts()`. Completion checkboxes call `task.mark_complete()`.
+
+**Verification:** Streamlit's `AppTest` harness runs `app.py` headlessly with
+zero exceptions; simulating the "Add pet" form creates a real `Pet` in
+`st.session_state` that survives the rerun — confirming the bridge works.
+
+
 
 ## Phase 4 — _(pending)_
 
