@@ -119,11 +119,55 @@ The `Scheduler` is the algorithmic layer. Each feature maps to a named method in
 | **Conflict detection** | `Scheduler.detect_conflicts()`, `Scheduler.conflict_warnings()` | Flags overlapping time windows via `Task.overlaps_with()` (duration-aware). `conflict_warnings()` returns readable strings and never raises. |
 | **Recurring tasks** | `Task.next_occurrence()`, `Scheduler.complete_task(task)`, `Scheduler.expand_recurring(until)` | Completing a daily/weekly/monthly task auto-schedules its next occurrence using `timedelta`. |
 
+## Testing PawPal+
+
+Run the automated suite from the project root:
+
+```bash
+python -m pytest
+```
+
+The suite (`tests/test_pawpal.py`) covers both happy paths and edge cases:
+
+- **Core** — task completion toggles status; adding tasks grows a pet's list;
+  `Owner.all_tasks()` flattens tasks across pets.
+- **Sorting** — `sort_by_time()` returns tasks chronologically regardless of
+  insertion order; `sort_by_priority()` ranks the most urgent task first.
+- **Filtering** — `filter_by_pet()` and `filter_by_status()` / `pending()`
+  return the right subsets.
+- **Conflict detection** — exact same-time tasks and overlapping-duration tasks
+  are flagged; separate times are not; warnings come back as strings.
+- **Recurrence** — completing a daily task schedules the next day, a weekly task
+  the next week, and a one-off task spawns nothing.
+- **Edge cases** — empty pet, owner with no pets, and an empty scheduler all
+  behave safely without raising.
+
+Successful run:
+
+```text
+============================= test session starts ==============================
+platform darwin -- Python 3.14.4, pytest-9.1.1, pluggy-1.6.0
+rootdir: .../PawPal+
+collected 17 items
+
+tests/test_pawpal.py .................                                   [100%]
+
+============================== 17 passed in 0.01s ==============================
+```
+
+**Confidence level: ★★★★☆ (4/5).** All 17 tests pass and cover the core domain
+model and every scheduling algorithm, including edge cases. I hold back the
+fifth star because conflict detection compares tasks at their stored `due` time
+rather than across projected recurrences (see reflection §2b), and the suite
+does not yet exercise the Streamlit UI layer end-to-end.
+
 ## Project status
 
 - [x] **Phase 1** — System design (UML + class skeletons)
 - [x] **Phase 2** — OOP logic, CLI demo, and initial tests
 - [x] **Phase 3** — Streamlit UI (`app.py`) wired to the logic layer
+- [x] **Phase 4** — Algorithmic layer (sorting, filtering, conflicts, recurrence)
+- [x] **Phase 5** — Automated test suite (17 tests)
 - [ ] Next — refinements, final UML, and reflection
 
 ## Design reflections

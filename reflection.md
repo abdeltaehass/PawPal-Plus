@@ -152,6 +152,25 @@ owner ever had hundreds of tasks.
 
 
 
-## Phase 5 — _(pending)_
+## Phase 5 — Testing & Verification
+
+I grew the suite to **17 tests** in `tests/test_pawpal.py`, split into happy
+paths (sorting, filtering, recurrence, conflicts) and edge cases (empty pet,
+owner with no pets, empty scheduler, one-off completion, non-overlapping times).
+
+The brief's three required checks are covered explicitly:
+
+- **Sorting correctness** — `test_sort_by_time_orders_chronologically` adds
+  tasks out of order and asserts the hours come back `[7, 8, 14, 19]`.
+- **Recurrence** — `test_completing_daily_task_schedules_next_day` confirms
+  completing a daily task creates a second task one day later.
+- **Conflict detection** — `test_detect_conflicts_finds_exact_duplicate_time`
+  plus `test_overlapping_durations_conflict` and a negative
+  `test_separate_times_do_not_conflict`.
+
+**Confidence: 4/5.** The logic layer is well covered; the missing star reflects
+the recurrence/conflict tradeoff in §2b and the lack of end-to-end UI tests.
+
+
 
 ## Phase 6 — _(pending)_
