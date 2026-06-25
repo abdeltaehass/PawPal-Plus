@@ -117,7 +117,40 @@ zero exceptions; simulating the "Add pet" form creates a real `Pet` in
 
 
 
-## Phase 4 — _(pending)_
+## Phase 4 — Algorithmic Layer
+
+### 2a. What I added
+
+- **Sorting:** `sort_by_time()` / `sort_by_priority()`.
+- **Filtering:** `filter_by_pet()`, `filter_by_status()`, `pending()`.
+- **Conflict handling:** `detect_conflicts()` plus `conflict_warnings()`, which
+  returns readable strings rather than raising.
+- **Recurring tasks:** `complete_task()` marks a task done and, if it recurs,
+  auto-creates the next occurrence with `timedelta` (`Task.next_occurrence()`).
+
+One deliberate choice: I sort on `datetime` objects, not `"HH:MM"` strings. The
+AI suggestion to parse/compare time strings would work, but native `datetime`
+sorting is both clearer and correct across day boundaries, so I kept mine.
+
+### 2b. Tradeoffs
+
+**Conflict detection compares each task at its single stored `due` time, not
+across projected recurrences.** I chose *duration-aware* overlap
+(`Task.overlaps_with`, comparing `[due, due+duration)` windows) over naive
+exact-time matching — that is more accurate for back-to-back tasks. The tradeoff
+is that two *recurring* tasks are only flagged when their stored `due` dates land
+on the same day; two daily tasks that collide every morning but whose base dates
+differ would slip past `detect_conflicts()`. I accepted this because the per-day
+views (`tasks_for_day`, `expand_recurring`) already surface those collisions on
+demand, and projecting every recurrence pair would add cost and complexity out of
+proportion to a household-scale app.
+
+A secondary tradeoff: conflict detection is `O(n²)` pairwise
+(`itertools.combinations`). For a handful of pets and tasks this is trivially
+fast and far more readable than a sort-and-sweep; I'd revisit it only if a single
+owner ever had hundreds of tasks.
+
+
 
 ## Phase 5 — _(pending)_
 

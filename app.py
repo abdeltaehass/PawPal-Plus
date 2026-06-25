@@ -126,6 +126,12 @@ with today_col:
             )
             if done and not task.completed:
                 task.mark_complete()
+                # A recurring task rolls forward: add its next occurrence to the pet.
+                if task.recurrence is not Recurrence.NONE:
+                    pet = owner.get_pet(task.pet_name)
+                    upcoming = task.next_occurrence()
+                    if pet is not None and upcoming is not None:
+                        pet.add_task(upcoming)
     else:
         st.write("Nothing scheduled for today yet.")
 

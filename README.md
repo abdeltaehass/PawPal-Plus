@@ -75,30 +75,49 @@ Running `python main.py`:
 ```text
 PawPal+ — Sam's household (2 pets, 5 tasks)
 
-Today's Schedule
-----------------
+Sorted by Time
+--------------
 ○  7:30 AM  Morning walk (walk)  [Rex]  ↻daily
 ○  8:00 AM  Breakfast (feeding)  [Rex]  ↻daily
 ○  8:00 AM  Breakfast (feeding)  [Whiskers]  ↻daily
 ○  2:00 PM  Vet checkup (appointment)  [Rex]
-○  7:00 PM  Evening meds (medication)  [Whiskers]  ↻daily
+○  7:00 PM  Evening meds (medication)  [Rex]  ↻daily
 
-By Priority
------------
-CRITICAL  Vet checkup  (Rex)
-    HIGH  Breakfast  (Rex)
-    HIGH  Breakfast  (Whiskers)
-    HIGH  Evening meds  (Whiskers)
-  MEDIUM  Morning walk  (Rex)
-
-Scheduling Conflicts
+Filter — Rex's tasks
 --------------------
-⚠  Breakfast clashes with Breakfast  at 8:00 AM  (Rex & Whiskers)
+○  7:00 PM  Evening meds (medication)  [Rex]  ↻daily
+○  7:30 AM  Morning walk (walk)  [Rex]  ↻daily
+○  2:00 PM  Vet checkup (appointment)  [Rex]
+○  8:00 AM  Breakfast (feeding)  [Rex]  ↻daily
 
-Mark a Task Complete
---------------------
-Marked done: ✓  7:30 AM  Morning walk (walk)  [Rex]  ↻daily
+Conflict Warnings
+-----------------
+⚠ 8:00 AM: 'Breakfast' overlaps 'Breakfast' (Rex & Whiskers)
+
+Recurring — complete a daily task
+---------------------------------
+Completed: Morning walk  (Thu 07:30 AM)
+Auto-scheduled: Morning walk  (Fri 07:30 AM)
+
+Filter — by status
+------------------
+Completed: ['Morning walk']
+Pending:   5 tasks
 ```
+
+## Smarter Scheduling
+
+The `Scheduler` is the algorithmic layer. Each feature maps to a named method in
+[`pawpal_system.py`](pawpal_system.py):
+
+| Feature | Method(s) | Notes |
+| ------- | --------- | ----- |
+| **Sort by time** | `Scheduler.sort_by_time()` | Orders tasks chronologically. Sorts on `datetime` objects directly (not `"HH:MM"` strings), so dates and times compare correctly. |
+| **Sort by priority** | `Scheduler.sort_by_priority()` | Highest urgency first, ties broken by time. |
+| **Filter by pet** | `Scheduler.filter_by_pet(name)` | Returns just that pet's tasks. |
+| **Filter by status** | `Scheduler.filter_by_status(done)`, `Scheduler.pending()` | Split completed vs. outstanding tasks. |
+| **Conflict detection** | `Scheduler.detect_conflicts()`, `Scheduler.conflict_warnings()` | Flags overlapping time windows via `Task.overlaps_with()` (duration-aware). `conflict_warnings()` returns readable strings and never raises. |
+| **Recurring tasks** | `Task.next_occurrence()`, `Scheduler.complete_task(task)`, `Scheduler.expand_recurring(until)` | Completing a daily/weekly/monthly task auto-schedules its next occurrence using `timedelta`. |
 
 ## Project status
 

@@ -238,6 +238,18 @@ class Scheduler:
         """Return tasks ordered chronologically by due time."""
         return sorted(self.tasks, key=lambda t: t.due)
 
+    def filter_by_pet(self, pet_name: str) -> list[Task]:
+        """Return only the tasks belonging to the named pet."""
+        return [t for t in self.tasks if t.pet_name == pet_name]
+
+    def filter_by_status(self, completed: bool) -> list[Task]:
+        """Return tasks matching the given completion state."""
+        return [t for t in self.tasks if t.completed == completed]
+
+    def pending(self) -> list[Task]:
+        """Return tasks that are not yet completed."""
+        return self.filter_by_status(False)
+
     def tasks_for_day(self, day: date) -> list[Task]:
         """Return tasks due on ``day`` (including recurring), ordered by time."""
         due = [t for t in self.tasks if t.is_due_on(day)]
@@ -268,6 +280,16 @@ class Scheduler:
             if a.overlaps_with(b)
         ]
 
+    def conflict_warnings(self) -> list[str]:
+        """Return human-readable warning strings (never raises) for each conflict."""
+        warnings: list[str] = []
+        for conflict in self.detect_conflicts():
+            a, b = conflict.first, conflict.second
+            when = a.due.strftime("%I:%M %p").lstrip("0")
+            who = a.pet_name if a.pet_name == b.pet_name else f"{a.pet_name} & {b.pet_name}"
+            warnings.append(f"⚠ {when}: '{a.title}' overlaps '{b.title}' ({who})")
+        return warnings
+
     def expand_recurring(self, until: date) -> list[Task]:
         """Materialize recurring tasks into concrete occurrences up to ``until``."""
         occurrences: list[Task] = []
@@ -277,3 +299,13 @@ class Scheduler:
                 occurrences.append(current)
                 current = current.next_occurrence()
         return sorted(occurrences, key=lambda t: t.due)
+
+    def complete_task(self, task: Task) -> Optional[Task]:
+        """Mark a task done; if it recurs, schedule and return its next occurrence."""
+        task.mark_complete()
+        if task.recurrence is Recurrence.NONE:
+            return None
+        upcoming = task.next_occurrence()
+        if upcoming is not None:
+            self.add_task(upcoming)
+        return upcoming

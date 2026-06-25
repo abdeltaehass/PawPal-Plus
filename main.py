@@ -1,8 +1,8 @@
 """Command-line demo for PawPal+.
 
-Builds a small household of pets and tasks, then exercises the Scheduler to
-print today's schedule, a priority view, detected conflicts, and the week
-ahead. Run with: ``python main.py``.
+Builds a small household of pets and tasks, then exercises the Scheduler's
+algorithmic layer: sorting, filtering, conflict warnings, and recurring tasks.
+Run with: ``python main.py``.
 """
 
 from datetime import datetime, time
@@ -38,16 +38,17 @@ def build_household() -> Owner:
     owner.add_pet(rex)
     owner.add_pet(whiskers)
 
+    # Added deliberately OUT OF ORDER to show sort_by_time() at work.
+    rex.add_task(Task("Evening meds", TaskType.MEDICATION, at(19, 0), 5,
+                      Priority.HIGH, Recurrence.DAILY))
     rex.add_task(Task("Morning walk", TaskType.WALK, at(7, 30), 30,
                       Priority.MEDIUM, Recurrence.DAILY))
-    rex.add_task(Task("Breakfast", TaskType.FEEDING, at(8, 0), 15,
-                      Priority.HIGH, Recurrence.DAILY))
     rex.add_task(Task("Vet checkup", TaskType.APPOINTMENT, at(14, 0), 60,
                       Priority.CRITICAL, Recurrence.NONE))
-
+    rex.add_task(Task("Breakfast", TaskType.FEEDING, at(8, 0), 15,
+                      Priority.HIGH, Recurrence.DAILY))
+    # Same 8:00 slot as Rex's breakfast -> an intentional conflict.
     whiskers.add_task(Task("Breakfast", TaskType.FEEDING, at(8, 0), 15,
-                           Priority.HIGH, Recurrence.DAILY))
-    whiskers.add_task(Task("Evening meds", TaskType.MEDICATION, at(19, 0), 5,
                            Priority.HIGH, Recurrence.DAILY))
 
     return owner
@@ -60,28 +61,32 @@ def main() -> None:
     print(f"PawPal+ — {owner.name}'s household "
           f"({len(owner.pets)} pets, {len(owner.all_tasks())} tasks)")
 
-    banner("Today's Schedule")
-    for task in scheduler.today():
+    # --- Sorting: tasks were added out of order ---
+    banner("Sorted by Time")
+    for task in scheduler.sort_by_time():
         print(task)
 
-    banner("By Priority")
-    for task in scheduler.sort_by_priority():
-        print(f"{task.priority.name:>8}  {task.title}  ({task.pet_name})")
+    # --- Filtering: by pet, then by status ---
+    banner("Filter — Rex's tasks")
+    for task in scheduler.filter_by_pet("Rex"):
+        print(task)
 
-    banner("Scheduling Conflicts")
-    conflicts = scheduler.detect_conflicts()
-    if conflicts:
-        for conflict in conflicts:
-            both = f"{conflict.first.pet_name} & {conflict.second.pet_name}"
-            print(f"⚠  {conflict}  at "
-                  f"{conflict.first.due.strftime('%I:%M %p').lstrip('0')}  ({both})")
-    else:
-        print("None — schedule is clear.")
+    # --- Conflict detection: warnings, not crashes ---
+    banner("Conflict Warnings")
+    warnings = scheduler.conflict_warnings()
+    print("\n".join(warnings) if warnings else "None — schedule is clear.")
 
-    banner("Mark a Task Complete")
-    walk = scheduler.today()[0]
-    walk.mark_complete()
-    print(f"Marked done: {walk}")
+    # --- Recurring tasks: completing a daily task rolls it forward ---
+    banner("Recurring — complete a daily task")
+    walk = next(t for t in scheduler.tasks if t.title == "Morning walk")
+    next_walk = scheduler.complete_task(walk)
+    print(f"Completed: {walk.title}  ({walk.due:%a %I:%M %p})")
+    print(f"Auto-scheduled: {next_walk.title}  ({next_walk.due:%a %I:%M %p})")
+
+    # --- Filtering by status reflects the change ---
+    banner("Filter — by status")
+    print("Completed:", [t.title for t in scheduler.filter_by_status(True)])
+    print(f"Pending:   {len(scheduler.pending())} tasks")
 
     print()
 
