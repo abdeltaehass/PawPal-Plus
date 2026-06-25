@@ -49,10 +49,58 @@ Owner ──owns──▶ Pet ──has──▶ Task
 See [`diagrams/uml_draft.mmd`](diagrams/uml_draft.mmd) for the full UML class
 diagram.
 
+## Getting Started
+
+```bash
+# (optional) create a virtual environment
+python -m venv .venv && source .venv/bin/activate
+
+# install test dependency
+pip install -r requirements.txt
+
+# run the CLI demo
+python main.py
+
+# run the tests
+python -m pytest
+```
+
+## Sample Output
+
+Running `python main.py`:
+
+```text
+PawPal+ — Sam's household (2 pets, 5 tasks)
+
+Today's Schedule
+----------------
+○  7:30 AM  Morning walk (walk)  [Rex]  ↻daily
+○  8:00 AM  Breakfast (feeding)  [Rex]  ↻daily
+○  8:00 AM  Breakfast (feeding)  [Whiskers]  ↻daily
+○  2:00 PM  Vet checkup (appointment)  [Rex]
+○  7:00 PM  Evening meds (medication)  [Whiskers]  ↻daily
+
+By Priority
+-----------
+CRITICAL  Vet checkup  (Rex)
+    HIGH  Breakfast  (Rex)
+    HIGH  Breakfast  (Whiskers)
+    HIGH  Evening meds  (Whiskers)
+  MEDIUM  Morning walk  (Rex)
+
+Scheduling Conflicts
+--------------------
+⚠  Breakfast clashes with Breakfast  at 8:00 AM  (Rex & Whiskers)
+
+Mark a Task Complete
+--------------------
+Marked done: ✓  7:30 AM  Morning walk (walk)  [Rex]  ↻daily
+```
+
 ## Project status
 
 - [x] **Phase 1** — System design (UML + class skeletons)
-- [ ] Phase 2 — Implement OOP logic
+- [x] **Phase 2** — OOP logic, CLI demo, and initial tests
 - [ ] Phase 3 — Scheduling algorithms (sort, conflicts, recurrence)
 - [ ] Phase 4 — CLI demo + pytest suite
 - [ ] Phase 5 — Streamlit UI

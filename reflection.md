@@ -69,7 +69,32 @@ skeleton — what changed and why. Examples to consider:)_
 
 ---
 
-## Phase 2 — _(pending)_
+## Phase 2 — Implementation (CLI-first)
+
+I implemented all four classes and verified them from the terminal before any UI.
+
+**Key decisions while fleshing out the logic:**
+
+- **Scheduler ↔ Owner boundary.** Rather than give the `Scheduler` knowledge of
+  pets, I added `Owner.all_tasks()` (which flattens every pet's task list) and a
+  `Scheduler.from_owner(owner)` constructor. The scheduler only ever sees a flat
+  list of `Task`s, which keeps it decoupled from the ownership hierarchy.
+- **Readable output.** A raw list of dataclass `repr`s was unreadable, so I gave
+  `Task` a `__str__` that renders a one-line summary (status • time • title •
+  pet • recurrence). The demo prints those directly.
+- **Conflict detection** compares each pair of *active* (non-completed) tasks via
+  `Task.overlaps_with`, a simple `[due, end)` interval overlap. This is correct
+  for concrete same-day tasks; recurring tasks are compared at their base
+  occurrence (full per-day expansion is available via `expand_recurring`).
+- **Recurrence** is modeled by `next_occurrence()` returning a fresh dated `Task`,
+  so `expand_recurring(until)` can walk the chain to materialize a date range.
+
+**Verification:** `python main.py` prints today's schedule, a priority view, the
+detected breakfast conflict, and a completed task. `python -m pytest` runs three
+checks (completion toggles status, adding a task grows a pet's list, overlapping
+tasks are flagged) — all passing.
+
+
 
 ## Phase 3 — _(pending)_
 

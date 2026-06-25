@@ -1,27 +1,22 @@
 """PawPal+ — Smart Pet Care Management System (logic layer).
 
-This module is the **logic layer** for PawPal+. It defines the domain model
+This module is the logic layer for PawPal+. It defines the domain model
 (``Owner``, ``Pet``, ``Task``) and the scheduling engine (``Scheduler``) that
 sorts, surfaces, and de-conflicts pet-care tasks.
 
-Phase 1 deliverable: class *skeletons* only — attributes are fully declared,
-but method bodies are intentionally left as stubs (``NotImplementedError``) to
-be implemented in later phases. Keeping behaviour unimplemented here lets us
-lock the architecture (names, relationships, signatures) before writing logic.
-
 Design notes
 ------------
-* ``Task`` and ``Pet`` are ``@dataclass`` types — they are mostly bundles of
-  data with a few helper methods, so dataclasses remove boilerplate.
-* ``Owner`` is also a dataclass (it owns a list of pets).
+* ``Task``, ``Pet``, and ``Owner`` are dataclasses — they are mostly bundles of
+  data, so dataclasses remove constructor/repr boilerplate.
 * ``Scheduler`` is a plain class — it is behaviour-heavy (algorithms) rather
   than data-heavy, so a dataclass would buy us little.
-* Enums (``TaskType``, ``Priority``, ``Recurrence``) replace "magic strings"
-  so invalid states are unrepresentable and sorting by priority is trivial.
+* Enums (``TaskType``, ``Priority``, ``Recurrence``) replace magic strings, so
+  invalid states are unrepresentable and sorting by priority is trivial.
 """
 
 from __future__ import annotations
 
+import calendar
 import itertools
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
@@ -65,34 +60,31 @@ class Recurrence(Enum):
 _task_id_counter = itertools.count(1)
 
 
+def _add_one_month(when: datetime) -> datetime:
+    """Return ``when`` advanced by one calendar month, clamping the day if needed."""
+    month = when.month % 12 + 1
+    year = when.year + (when.month // 12)
+    last_day = calendar.monthrange(year, month)[1]
+    return when.replace(year=year, month=month, day=min(when.day, last_day))
+
+
+def _advance(when: datetime, recurrence: "Recurrence") -> datetime:
+    """Return the next occurrence time for ``when`` under the given recurrence."""
+    if recurrence is Recurrence.DAILY:
+        return when + timedelta(days=1)
+    if recurrence is Recurrence.WEEKLY:
+        return when + timedelta(weeks=1)
+    if recurrence is Recurrence.MONTHLY:
+        return _add_one_month(when)
+    return when
+
+
 # ---------------------------------------------------------------------------
 # Domain model
 # ---------------------------------------------------------------------------
 @dataclass
 class Task:
-    """A single unit of pet care (a feeding, a walk, a vet visit, ...).
-
-    Attributes
-    ----------
-    title:
-        Human-readable label, e.g. "Morning walk".
-    task_type:
-        Category of care (see :class:`TaskType`).
-    due:
-        When the task should happen.
-    duration_minutes:
-        Expected length; used for overlap/conflict detection.
-    priority:
-        Urgency used to order the day's agenda.
-    recurrence:
-        Repeat cadence; ``NONE`` for a one-off task.
-    completed:
-        Whether the owner has marked this task done.
-    pet_name:
-        Name of the pet this task belongs to (set when attached to a pet).
-    task_id:
-        Auto-assigned unique identifier.
-    """
+    """A single unit of pet care (a feeding, a walk, a vet visit, ...)."""
 
     title: str
     task_type: TaskType
@@ -104,26 +96,55 @@ class Task:
     pet_name: Optional[str] = None
     task_id: int = field(default_factory=lambda: next(_task_id_counter), init=False)
 
-    # -- behaviour stubs --------------------------------------------------
     def mark_complete(self) -> None:
         """Mark this task as done."""
-        raise NotImplementedError
+        self.completed = True
 
     def end_time(self) -> datetime:
-        """Return ``due + duration``; the moment the task is expected to finish."""
-        raise NotImplementedError
+        """Return the moment the task is expected to finish (due + duration)."""
+        return self.due + timedelta(minutes=self.duration_minutes)
 
     def is_due_on(self, day: date) -> bool:
-        """Return ``True`` if this task occurs on ``day`` (respecting recurrence)."""
-        raise NotImplementedError
+        """Return ``True`` if this task occurs on ``day``, respecting recurrence."""
+        start = self.due.date()
+        if self.recurrence is Recurrence.NONE:
+            return day == start
+        if day < start:
+            return False
+        if self.recurrence is Recurrence.DAILY:
+            return True
+        if self.recurrence is Recurrence.WEEKLY:
+            return day.weekday() == start.weekday()
+        if self.recurrence is Recurrence.MONTHLY:
+            return day.day == start.day
+        return False
 
     def overlaps_with(self, other: "Task") -> bool:
         """Return ``True`` if this task's time window collides with ``other``'s."""
-        raise NotImplementedError
+        return self.due < other.end_time() and other.due < self.end_time()
 
     def next_occurrence(self) -> Optional["Task"]:
         """Return the next repeat of this task, or ``None`` if non-recurring."""
-        raise NotImplementedError
+        if self.recurrence is Recurrence.NONE:
+            return None
+        return Task(
+            title=self.title,
+            task_type=self.task_type,
+            due=_advance(self.due, self.recurrence),
+            duration_minutes=self.duration_minutes,
+            priority=self.priority,
+            recurrence=self.recurrence,
+            completed=False,
+            pet_name=self.pet_name,
+        )
+
+    def __str__(self) -> str:
+        """Return a compact, human-readable one-line summary of the task."""
+        status = "✓" if self.completed else "○"
+        when = self.due.strftime("%I:%M %p").lstrip("0")
+        owner = f"  [{self.pet_name}]" if self.pet_name else ""
+        repeat = "" if self.recurrence is Recurrence.NONE else f"  ↻{self.recurrence.value}"
+        return f"{status} {when:>8}  {self.title} ({self.task_type.value}){owner}{repeat}"
 
 
 @dataclass
@@ -138,16 +159,17 @@ class Pet:
     tasks: list[Task] = field(default_factory=list)
 
     def add_task(self, task: Task) -> None:
-        """Attach a care task to this pet."""
-        raise NotImplementedError
+        """Attach a care task to this pet and stamp it with the pet's name."""
+        task.pet_name = self.name
+        self.tasks.append(task)
 
     def remove_task(self, task_id: int) -> None:
         """Detach a task from this pet by its id."""
-        raise NotImplementedError
+        self.tasks = [t for t in self.tasks if t.task_id != task_id]
 
     def get_tasks(self) -> list[Task]:
-        """Return all tasks attached to this pet."""
-        raise NotImplementedError
+        """Return a copy of all tasks attached to this pet."""
+        return list(self.tasks)
 
 
 @dataclass
@@ -160,19 +182,22 @@ class Owner:
 
     def add_pet(self, pet: Pet) -> None:
         """Register a pet under this owner."""
-        raise NotImplementedError
+        self.pets.append(pet)
 
     def remove_pet(self, name: str) -> None:
         """Remove a pet (and its tasks) by name."""
-        raise NotImplementedError
+        self.pets = [p for p in self.pets if p.name != name]
 
     def get_pet(self, name: str) -> Optional[Pet]:
-        """Look up one of this owner's pets by name."""
-        raise NotImplementedError
+        """Look up one of this owner's pets by name, or ``None`` if absent."""
+        return next((p for p in self.pets if p.name == name), None)
 
     def all_tasks(self) -> list[Task]:
-        """Return every task across all of this owner's pets (flattened)."""
-        raise NotImplementedError
+        """Return every task across all of this owner's pets, flattened."""
+        tasks: list[Task] = []
+        for pet in self.pets:
+            tasks.extend(pet.get_tasks())
+        return tasks
 
 
 # ---------------------------------------------------------------------------
@@ -185,60 +210,70 @@ class Conflict:
     first: Task
     second: Task
 
+    def __str__(self) -> str:
+        """Return a readable description of the clashing pair."""
+        return f"{self.first.title} clashes with {self.second.title}"
+
 
 class Scheduler:
-    """Organizes and prioritizes tasks.
-
-    The scheduler is the algorithmic heart of PawPal+: it sorts tasks, surfaces
-    the day's agenda, expands recurring tasks into concrete occurrences, and
-    flags scheduling conflicts.
-    """
+    """The 'brain' that retrieves, organizes, and manages tasks across pets."""
 
     def __init__(self, tasks: Optional[list[Task]] = None) -> None:
-        self.tasks: list[Task] = tasks if tasks is not None else []
+        self.tasks: list[Task] = list(tasks) if tasks is not None else []
+
+    @classmethod
+    def from_owner(cls, owner: Owner) -> "Scheduler":
+        """Build a scheduler populated with every task across the owner's pets."""
+        return cls(owner.all_tasks())
 
     def add_task(self, task: Task) -> None:
         """Register a task with the scheduler."""
-        raise NotImplementedError
+        self.tasks.append(task)
 
     def sort_by_priority(self) -> list[Task]:
         """Return tasks ordered by priority (highest first), tie-broken by time."""
-        raise NotImplementedError
+        return sorted(self.tasks, key=lambda t: (-t.priority.value, t.due))
 
     def sort_by_time(self) -> list[Task]:
         """Return tasks ordered chronologically by due time."""
-        raise NotImplementedError
+        return sorted(self.tasks, key=lambda t: t.due)
 
     def tasks_for_day(self, day: date) -> list[Task]:
-        """Return all tasks due on ``day`` (including recurring occurrences)."""
-        raise NotImplementedError
+        """Return tasks due on ``day`` (including recurring), ordered by time."""
+        due = [t for t in self.tasks if t.is_due_on(day)]
+        return sorted(due, key=lambda t: t.due.time())
 
     def today(self) -> list[Task]:
-        """Return today's prioritized agenda."""
-        raise NotImplementedError
+        """Return today's schedule in chronological order."""
+        return self.tasks_for_day(date.today())
 
     def upcoming(self, days: int = 7) -> list[Task]:
-        """Return tasks due within the next ``days`` days."""
-        raise NotImplementedError
+        """Return unique tasks due within the next ``days`` days, ordered by date."""
+        start = date.today()
+        result: list[Task] = []
+        seen: set[int] = set()
+        for offset in range(days + 1):
+            for task in self.tasks_for_day(start + timedelta(days=offset)):
+                if task.task_id not in seen:
+                    seen.add(task.task_id)
+                    result.append(task)
+        return result
 
     def detect_conflicts(self) -> list[Conflict]:
-        """Return pairs of tasks whose time windows overlap."""
-        raise NotImplementedError
+        """Return pairs of active tasks whose scheduled time windows overlap."""
+        active = [t for t in self.tasks if not t.completed]
+        return [
+            Conflict(a, b)
+            for a, b in itertools.combinations(active, 2)
+            if a.overlaps_with(b)
+        ]
 
     def expand_recurring(self, until: date) -> list[Task]:
         """Materialize recurring tasks into concrete occurrences up to ``until``."""
-        raise NotImplementedError
-
-
-if __name__ == "__main__":
-    # A real CLI demo arrives in a later phase; this is just a smoke check
-    # that the skeleton imports and constructs cleanly.
-    owner = Owner(name="Sam", email="sam@example.com")
-    rex = Pet(name="Rex", species="dog", breed="Beagle", age=4)
-    walk = Task(
-        title="Morning walk",
-        task_type=TaskType.WALK,
-        due=datetime.now(),
-        recurrence=Recurrence.DAILY,
-    )
-    print(f"Built {owner.name}, {rex.name}, and task #{walk.task_id}: {walk.title}")
+        occurrences: list[Task] = []
+        for task in self.tasks:
+            current: Optional[Task] = task
+            while current is not None and current.due.date() <= until:
+                occurrences.append(current)
+                current = current.next_occurrence()
+        return sorted(occurrences, key=lambda t: t.due)
