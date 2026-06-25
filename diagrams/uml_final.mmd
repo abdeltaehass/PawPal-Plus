@@ -1,0 +1,105 @@
+%% PawPal+ — UML Class Diagram (final, Phase 6)
+%% Reflects the implemented code in pawpal_system.py.
+%% Preview in VS Code (Mermaid extension) or https://mermaid.live
+classDiagram
+    direction LR
+
+    class Owner {
+        +str name
+        +str email
+        +List~Pet~ pets
+        +add_pet(pet) None
+        +remove_pet(name) None
+        +get_pet(name) Pet
+        +all_tasks() List~Task~
+    }
+
+    class Pet {
+        +str name
+        +str species
+        +str breed
+        +int age
+        +str notes
+        +List~Task~ tasks
+        +add_task(task) None
+        +remove_task(task_id) None
+        +get_tasks() List~Task~
+    }
+
+    class Task {
+        +int task_id
+        +str title
+        +TaskType task_type
+        +datetime due
+        +int duration_minutes
+        +Priority priority
+        +Recurrence recurrence
+        +bool completed
+        +Optional~str~ pet_name
+        +mark_complete() None
+        +end_time() datetime
+        +is_due_on(day) bool
+        +overlaps_with(other) bool
+        +next_occurrence() Optional~Task~
+        +__str__() str
+    }
+
+    class Scheduler {
+        +List~Task~ tasks
+        +from_owner(owner) Scheduler$
+        +add_task(task) None
+        +sort_by_time() List~Task~
+        +sort_by_priority() List~Task~
+        +filter_by_pet(name) List~Task~
+        +filter_by_status(completed) List~Task~
+        +pending() List~Task~
+        +tasks_for_day(day) List~Task~
+        +today() List~Task~
+        +upcoming(days) List~Task~
+        +detect_conflicts() List~Conflict~
+        +conflict_warnings() List~str~
+        +expand_recurring(until) List~Task~
+        +complete_task(task) Optional~Task~
+    }
+
+    class Conflict {
+        +Task first
+        +Task second
+        +__str__() str
+    }
+
+    class TaskType {
+        <<enumeration>>
+        FEEDING
+        WALK
+        MEDICATION
+        APPOINTMENT
+        GROOMING
+        OTHER
+    }
+
+    class Priority {
+        <<enumeration>>
+        LOW
+        MEDIUM
+        HIGH
+        CRITICAL
+    }
+
+    class Recurrence {
+        <<enumeration>>
+        NONE
+        DAILY
+        WEEKLY
+        MONTHLY
+    }
+
+    Owner "1" o-- "0..*" Pet : owns
+    Pet "1" o-- "0..*" Task : has
+    Scheduler "1" o-- "0..*" Task : manages
+    Scheduler ..> Owner : from_owner()
+    Scheduler ..> Conflict : produces
+    Conflict --> "2" Task : references
+    Task ..> TaskType : uses
+    Task ..> Priority : uses
+    Task ..> Recurrence : uses

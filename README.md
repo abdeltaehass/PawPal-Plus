@@ -25,6 +25,22 @@ A user of PawPal+ should be able to:
    including one-off and recurring tasks.
 3. **See today's agenda** — a prioritized, conflict-aware list of what's due.
 
+## Features
+
+- 🐾 **Pet & task management** — register pets and attach care tasks (feeding,
+  walk, medication, appointment, grooming) with a time, duration, and priority.
+- ⏱️ **Sorting** — order tasks by time (`sort_by_time`) or by urgency
+  (`sort_by_priority`).
+- 🔎 **Filtering** — slice tasks by pet (`filter_by_pet`) or completion status
+  (`filter_by_status` / `pending`).
+- ⚠️ **Conflict warnings** — duration-aware overlap detection that surfaces
+  human-readable warnings instead of crashing.
+- 🔁 **Recurring tasks** — daily / weekly / monthly tasks that automatically roll
+  to their next occurrence when completed.
+- 📅 **Today & upcoming views** — see what's due today or across the next week.
+- 🖥️ **Two front ends** — a Streamlit web UI (`app.py`) and a CLI demo
+  (`main.py`), both over the same logic layer, with a 17-test `pytest` suite.
+
 ## Architecture
 
 The system is split into two layers:
@@ -46,8 +62,9 @@ Owner ──owns──▶ Pet ──has──▶ Task
                     Scheduler ┘ (manages / prioritizes)
 ```
 
-See [`diagrams/uml_draft.mmd`](diagrams/uml_draft.mmd) for the full UML class
-diagram.
+See [`diagrams/uml_final.mmd`](diagrams/uml_final.mmd) for the full UML class
+diagram of the finished system (the Phase 1 draft is preserved at
+[`diagrams/uml_draft.mmd`](diagrams/uml_draft.mmd)).
 
 ## Getting Started
 
@@ -68,7 +85,37 @@ streamlit run app.py
 python -m pytest
 ```
 
-## Sample Output
+## Demo Walkthrough
+
+### What you can do in the app (`streamlit run app.py`)
+
+- **Add a pet** from the sidebar (name, species, breed, age, notes).
+- **Schedule a task** for any pet — choose a type, date, time, duration,
+  priority, and how often it repeats.
+- **Watch the metrics** update live: pets, tasks due today, and active conflicts.
+- **Work today's list**: tick a task to complete it; recurring tasks
+  automatically roll forward to their next date.
+- **Browse all tasks** in a sortable table, filtered by pet and/or status.
+- **See conflict warnings** surfaced as one friendly callout whenever two tasks
+  overlap in time.
+
+### Example workflow
+
+1. Add a pet **Rex** (dog).
+2. Schedule **"Morning walk"** at 7:30 AM, repeating **Daily**.
+3. Schedule **"Breakfast"** at 8:00 AM for Rex and another **"Breakfast"** at
+   8:00 AM for a second pet, **Whiskers** → PawPal+ flags the 8:00 AM overlap.
+4. Open **Today** and tick *Morning walk* → it's marked done and tomorrow's walk
+   is scheduled automatically.
+
+### Scheduler behaviors on display
+
+- **Sorting** — today's list and the all-tasks table come back in time order.
+- **Filtering** — narrow the table by pet or by completed/pending status.
+- **Conflict warnings** — overlapping windows are detected and explained.
+- **Recurrence** — completing a daily/weekly/monthly task spawns the next one.
+
+### Sample CLI output
 
 Running `python main.py`:
 
@@ -168,7 +215,7 @@ does not yet exercise the Streamlit UI layer end-to-end.
 - [x] **Phase 3** — Streamlit UI (`app.py`) wired to the logic layer
 - [x] **Phase 4** — Algorithmic layer (sorting, filtering, conflicts, recurrence)
 - [x] **Phase 5** — Automated test suite (17 tests)
-- [ ] Next — refinements, final UML, and reflection
+- [x] **Phase 6** — UI polish, final UML, and reflection
 
 ## Design reflections
 

@@ -1,9 +1,9 @@
 """PawPal+ — Streamlit UI.
 
 This is the presentation layer. It owns no business logic of its own: every
-button and form delegates to the classes in ``pawpal_system``. The single
-``Owner`` instance is kept in ``st.session_state`` so that pets and tasks added
-in the browser survive Streamlit's top-to-bottom reruns.
+button, filter, and view delegates to the classes in ``pawpal_system``. The
+single ``Owner`` instance is kept in ``st.session_state`` so that pets and
+tasks added in the browser survive Streamlit's top-to-bottom reruns.
 
 Run with: ``streamlit run app.py``.
 """
@@ -32,14 +32,31 @@ def get_owner() -> Owner:
     return st.session_state.owner
 
 
+def task_rows(tasks: list[Task]) -> list[dict]:
+    """Flatten tasks into display rows for st.dataframe."""
+    return [
+        {
+            "Time": t.due.strftime("%a %I:%M %p"),
+            "Task": t.title,
+            "Type": t.task_type.value.title(),
+            "Pet": t.pet_name or "",
+            "Priority": t.priority.name.title(),
+            "Repeats": t.recurrence.value.title(),
+            "Done": "✓" if t.completed else "",
+        }
+        for t in tasks
+    ]
+
+
 owner = get_owner()
+scheduler = Scheduler.from_owner(owner)
 
 st.title("🐾 PawPal+")
 st.caption("Smart pet care — feedings, walks, meds, and appointments, prioritized.")
 
 
 # ---------------------------------------------------------------------------
-# Sidebar — add a pet
+# Sidebar — manage pets
 # ---------------------------------------------------------------------------
 with st.sidebar:
     st.header("Add a Pet")
@@ -73,12 +90,31 @@ with st.sidebar:
 
 
 # ---------------------------------------------------------------------------
-# Main — schedule a task / today's schedule
+# At-a-glance metrics
+# ---------------------------------------------------------------------------
+m1, m2, m3 = st.columns(3)
+m1.metric("Pets", len(owner.pets))
+m2.metric("Tasks today", len(scheduler.today()))
+m3.metric("Conflicts", len(scheduler.detect_conflicts()))
+
+# Conflict warnings — consolidated into one owner-friendly callout.
+warnings = scheduler.conflict_warnings()
+if warnings:
+    st.warning(
+        "**Heads up — overlapping tasks:**\n\n"
+        + "\n\n".join(f"- {w}" for w in warnings)
+    )
+
+st.divider()
+
+
+# ---------------------------------------------------------------------------
+# Schedule a task / today's schedule
 # ---------------------------------------------------------------------------
 schedule_col, today_col = st.columns(2)
 
 with schedule_col:
-    st.header("Schedule a Task")
+    st.subheader("➕ Schedule a Task")
     if not owner.pets:
         st.info("Add a pet in the sidebar to start scheduling tasks.")
     else:
@@ -116,10 +152,10 @@ with schedule_col:
                     st.warning("Please enter a task name.")
 
 with today_col:
-    st.header("Today's Schedule")
-    scheduler = Scheduler.from_owner(owner)
+    st.subheader("📅 Today")
     todays = scheduler.today()
     if todays:
+        st.caption("Tick a task to mark it done. Recurring tasks roll to the next date.")
         for task in todays:
             done = st.checkbox(
                 str(task), value=task.completed, key=f"task_{task.task_id}"
@@ -133,21 +169,43 @@ with today_col:
                     if pet is not None and upcoming is not None:
                         pet.add_task(upcoming)
     else:
-        st.write("Nothing scheduled for today yet.")
+        st.info("Nothing scheduled for today yet.")
 
-    conflicts = scheduler.detect_conflicts()
-    if conflicts:
-        st.subheader("⚠️ Conflicts")
-        for conflict in conflicts:
-            when = conflict.first.due.strftime("%I:%M %p").lstrip("0")
-            st.error(f"{conflict} at {when}")
+
+# ---------------------------------------------------------------------------
+# All tasks — sorted and filterable
+# ---------------------------------------------------------------------------
+st.divider()
+st.subheader("🗂️ All Tasks")
+
+if not owner.all_tasks():
+    st.info("No tasks yet — schedule one above.")
+else:
+    pet_col, status_col = st.columns(2)
+    pet_choice = pet_col.selectbox("Filter by pet", ["All"] + [p.name for p in owner.pets])
+    status_choice = status_col.radio(
+        "Filter by status", ["All", "Pending", "Completed"], horizontal=True
+    )
+
+    # Delegate filtering to the Scheduler, then sort chronologically.
+    tasks = scheduler.filter_by_pet(pet_choice) if pet_choice != "All" else list(scheduler.tasks)
+    if status_choice == "Pending":
+        tasks = [t for t in tasks if not t.completed]
+    elif status_choice == "Completed":
+        tasks = [t for t in tasks if t.completed]
+    tasks = sorted(tasks, key=lambda t: t.due)
+
+    if tasks:
+        st.dataframe(task_rows(tasks), use_container_width=True, hide_index=True)
+    else:
+        st.info("No tasks match those filters.")
 
 
 # ---------------------------------------------------------------------------
 # Pets overview
 # ---------------------------------------------------------------------------
 st.divider()
-st.header("Your Pets")
+st.subheader("🐾 Your Pets")
 if not owner.pets:
     st.write("No pets yet.")
 else:
@@ -157,10 +215,9 @@ else:
             + (f", {pet.breed}" if pet.breed else "")
             + f"  ·  {len(pet.get_tasks())} task(s)"
         ):
-            tasks = pet.get_tasks()
+            tasks = sorted(pet.get_tasks(), key=lambda t: t.due)
             if tasks:
-                for task in tasks:
-                    st.write(str(task))
+                st.table(task_rows(tasks))
             else:
                 st.write("No tasks scheduled.")
             if pet.notes:

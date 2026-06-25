@@ -173,4 +173,49 @@ the recurrence/conflict tradeoff in §2b and the lack of end-to-end UI tests.
 
 
 
-## Phase 6 — _(pending)_
+## Phase 6 — Polish & AI Strategy
+
+### Bringing the smart logic into the UI
+
+The Streamlit app now mirrors the algorithmic layer instead of just storing data:
+a metrics row (pets / tasks today / conflicts), a consolidated conflict callout,
+a sortable + filterable all-tasks table, and per-pet task tables. Every view
+calls the `Scheduler` (`today`, `sort_by_time`, `filter_by_pet`,
+`conflict_warnings`, `detect_conflicts`) rather than re-implementing logic.
+
+**Conflict presentation choice.** I surface conflicts as a single `st.warning`
+that lists each clash with its time and the pets involved, rather than one red
+`st.error` per pair. A warning (not an error) signals "review this" without
+implying the app broke, and grouping keeps a busy schedule from drowning in
+alerts — the most helpful framing for a pet owner.
+
+### Reflecting on AI strategy
+
+- **Most effective features.** Agent/multi-file editing was the biggest win for
+  the scheduler: a single change to "complete a recurring task" touched
+  `pawpal_system.py`, `app.py`, and the tests together, keeping them consistent.
+  Inline generation of the `pytest` suite (happy paths + edge cases) and quick
+  docstring passes were also high-leverage.
+- **A suggestion I rejected/modified.** The assistant proposed sorting times by
+  comparing `"HH:MM"` strings. I rejected it in favor of sorting on `datetime`
+  objects — it is clearer and stays correct across day boundaries (a string sort
+  would mis-order tasks spanning midnight or different dates). I also turned a
+  proposed "exact same start time" conflict check into duration-aware overlap
+  (`Task.overlaps_with`) so back-to-back tasks that bleed over are caught.
+- **Separate chat sessions per phase.** Keeping design, algorithms, and testing
+  in their own sessions stopped context from bleeding together — the testing
+  session stayed focused on edge cases instead of re-litigating design, and each
+  session's history stayed short and on-topic, which made the suggestions sharper.
+
+### Being the "lead architect"
+
+The AI was fastest at producing *plausible* code, but plausible isn't the same as
+*coherent with my design*. My job as the human was to hold the architecture: keep
+data classes (`Owner`/`Pet`/`Task`) separate from the behaviour-heavy `Scheduler`,
+insist on enums over magic strings, decide where each responsibility lived
+(self-describing checks on `Task`, cross-task logic on `Scheduler`), and reject
+"clever" suggestions that read worse than the obvious version. The most valuable
+thing I did was say *no* to accidental complexity and keep the system small,
+testable, and explainable — the AI accelerated the typing, but the design
+decisions and the verification (CLI demo + 17 tests) were mine to own.
+
