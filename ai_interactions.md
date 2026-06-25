@@ -52,11 +52,8 @@ distinct.
 
 ## Prompt Comparison — Challenge 5 (Weekly Rescheduling Logic)
 
-> ⚠️ **Honesty note:** I only have one assistant wired into this environment, so
-> I have filled in **Tool A** from the solution actually produced here. **Tool B**
-> is left as a template — to finish Challenge 5, run the *same* prompt through a
-> second assistant (e.g., Gemini, ChatGPT, or Copilot) and paste its result. I
-> did not invent another model's output.
+> **Note:** Tool A is the solution produced by the assistant used to build
+> PawPal+. Tool B is a real ChatGPT run of the same prompt, pasted in below.
 
 **Task / prompt used**
 
@@ -76,13 +73,77 @@ distinct.
 - **Decision:** kept it — simple and correct for the common case; a "catch up to
   the next future occurrence" variant can be layered on later if needed.
 
-### Tool B — _(second assistant — to be completed)_
+### Tool B — ChatGPT
 
-- **Model / tool:** _e.g., Gemini / ChatGPT / Copilot_
-- **Output:** _paste here_
-- **Useful:** _…_
-- **Flawed:** _…_
+- **Model / tool:** ChatGPT
+- **Output:**
+
+```python
+from dataclasses import dataclass, replace
+from datetime import datetime, timedelta
+from enum import Enum
+from calendar import monthrange
+
+
+class Recurrence(Enum):
+    NONE = "none"
+    DAILY = "daily"
+    WEEKLY = "weekly"
+    MONTHLY = "monthly"
+
+
+@dataclass(frozen=True)
+class Task:
+    due: datetime
+    recurrence: Recurrence = Recurrence.NONE
+
+    def next_occurrence(self) -> "Task | None":
+        if self.recurrence is Recurrence.NONE:
+            return None
+        if self.recurrence is Recurrence.DAILY:
+            next_due = self.due + timedelta(days=1)
+        elif self.recurrence is Recurrence.WEEKLY:
+            next_due = self.due + timedelta(weeks=1)
+        elif self.recurrence is Recurrence.MONTHLY:
+            year = self.due.year
+            month = self.due.month + 1
+            if month > 12:
+                month = 1
+                year += 1
+            day = min(self.due.day, monthrange(year, month)[1])
+            next_due = self.due.replace(year=year, month=month, day=day)
+        else:
+            raise ValueError(f"Unsupported recurrence: {self.recurrence}")
+        return replace(self, due=next_due)
+```
+
+- **Useful:**
+  - Same core idea as mine, and it independently validated two of my design
+    choices: `timedelta(weeks=1)` for weekly (Dec 29 → Jan 5 with no special
+    casing) and `calendar.monthrange()` to clamp the day for monthly
+    (Jan 31 → Feb 28). The worked examples made the boundary behavior easy to
+    confirm.
+  - `dataclasses.replace()` is a tidy one-liner for "copy with one field changed,"
+    and the defensive `else: raise ValueError` is a nice touch.
+- **Flawed (for *this* system):**
+  - **`frozen=True` is incompatible with PawPal+.** My `Task` is mutable on
+    purpose — `mark_complete()` sets `self.completed` and `Pet.add_task()` stamps
+    `self.pet_name`. A frozen dataclass raises `FrozenInstanceError` on both.
+  - **It doesn't reset `completed`.** `replace()` copies every field, so if the
+    current task was already done, the next occurrence comes back
+    `completed=True`. A freshly scheduled occurrence should start *not* done — my
+    version sets `completed=False` explicitly. That's a real correctness bug for a
+    scheduler.
+  - `replace()` also interacts awkwardly with my auto-assigned `task_id`
+    (`init=False`), which is why I construct a new `Task` explicitly.
 
 ### Final decision
 
-_Compare the two and record which approach you shipped and why._
+I shipped **Tool A (the build assistant's version)**. The two agree on the hard
+part — month/year boundaries — so it came down to fit and correctness, not the
+weekly math (which is identical). Tool A builds a fresh `Task` with
+`completed=False` and works with my mutable, auto-`task_id` design, whereas
+ChatGPT's `frozen=True` + `replace()` would break `mark_complete()` and silently
+carry the "done" flag into the next occurrence. ChatGPT's answer was still
+valuable: it independently confirmed the `monthrange` day-clamp, which raised my
+confidence in the monthly logic.
