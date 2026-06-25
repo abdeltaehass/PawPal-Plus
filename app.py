@@ -20,15 +20,17 @@ from pawpal_system import (
     Scheduler,
     Task,
     TaskType,
+    load_from_json,
+    save_to_json,
 )
 
 st.set_page_config(page_title="PawPal+", page_icon="🐾", layout="wide")
 
 
 def get_owner() -> Owner:
-    """Return the persisted Owner, creating an empty one on the first run."""
+    """Return the Owner, loading saved data from data.json on the first run."""
     if "owner" not in st.session_state:
-        st.session_state.owner = Owner(name="You")
+        st.session_state.owner = load_from_json()
     return st.session_state.owner
 
 
@@ -87,6 +89,13 @@ with st.sidebar:
         if st.button("Remove", disabled=(remove == "—")):
             owner.remove_pet(remove)
             st.rerun()
+
+    st.divider()
+    st.caption("💾 Pets and tasks are saved to `data.json` automatically.")
+    if st.button("🗑️ Reset all data"):
+        st.session_state.owner = Owner(name="You")
+        save_to_json(st.session_state.owner)
+        st.rerun()
 
 
 # ---------------------------------------------------------------------------
@@ -222,3 +231,7 @@ else:
                 st.write("No tasks scheduled.")
             if pet.notes:
                 st.caption(f"Notes: {pet.notes}")
+
+
+# Persist after every interaction so data survives app restarts.
+save_to_json(owner)

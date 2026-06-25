@@ -18,8 +18,10 @@ from __future__ import annotations
 
 import calendar
 import itertools
+import json
+import os
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from enum import Enum
 from typing import Optional
 
@@ -146,6 +148,33 @@ class Task:
         repeat = "" if self.recurrence is Recurrence.NONE else f"  ↻{self.recurrence.value}"
         return f"{status} {when:>8}  {self.title} ({self.task_type.value}){owner}{repeat}"
 
+    def to_dict(self) -> dict:
+        """Serialize this task to a JSON-friendly dictionary."""
+        return {
+            "title": self.title,
+            "task_type": self.task_type.value,
+            "due": self.due.isoformat(),
+            "duration_minutes": self.duration_minutes,
+            "priority": self.priority.name,
+            "recurrence": self.recurrence.value,
+            "completed": self.completed,
+            "pet_name": self.pet_name,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "Task":
+        """Rebuild a task from a dictionary produced by ``to_dict``."""
+        return cls(
+            title=data["title"],
+            task_type=TaskType(data["task_type"]),
+            due=datetime.fromisoformat(data["due"]),
+            duration_minutes=data["duration_minutes"],
+            priority=Priority[data["priority"]],
+            recurrence=Recurrence(data["recurrence"]),
+            completed=data["completed"],
+            pet_name=data.get("pet_name"),
+        )
+
 
 @dataclass
 class Pet:
@@ -170,6 +199,30 @@ class Pet:
     def get_tasks(self) -> list[Task]:
         """Return a copy of all tasks attached to this pet."""
         return list(self.tasks)
+
+    def to_dict(self) -> dict:
+        """Serialize this pet and its tasks to a dictionary."""
+        return {
+            "name": self.name,
+            "species": self.species,
+            "breed": self.breed,
+            "age": self.age,
+            "notes": self.notes,
+            "tasks": [t.to_dict() for t in self.tasks],
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "Pet":
+        """Rebuild a pet (and its tasks) from a dictionary."""
+        pet = cls(
+            name=data["name"],
+            species=data["species"],
+            breed=data.get("breed", ""),
+            age=data.get("age", 0),
+            notes=data.get("notes", ""),
+        )
+        pet.tasks = [Task.from_dict(t) for t in data.get("tasks", [])]
+        return pet
 
 
 @dataclass
@@ -198,6 +251,21 @@ class Owner:
         for pet in self.pets:
             tasks.extend(pet.get_tasks())
         return tasks
+
+    def to_dict(self) -> dict:
+        """Serialize this owner and all pets/tasks to a dictionary."""
+        return {
+            "name": self.name,
+            "email": self.email,
+            "pets": [p.to_dict() for p in self.pets],
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "Owner":
+        """Rebuild an owner (with pets and tasks) from a dictionary."""
+        owner = cls(name=data["name"], email=data.get("email", ""))
+        owner.pets = [Pet.from_dict(p) for p in data.get("pets", [])]
+        return owner
 
 
 # ---------------------------------------------------------------------------
@@ -271,6 +339,37 @@ class Scheduler:
                     result.append(task)
         return result
 
+    def next_available_slot(
+        self,
+        day: date,
+        duration_minutes: int,
+        start_hour: int = 8,
+        end_hour: int = 20,
+    ) -> Optional[datetime]:
+        """Return the earliest free start time on ``day`` that fits a task of the
+        given length within working hours, or ``None`` if the day is full.
+
+        Greedy sweep: walk the day's tasks in time order, tracking a ``cursor``
+        at the end of the latest commitment so far; the first gap >= the needed
+        duration wins.
+        """
+        need = timedelta(minutes=duration_minutes)
+        window_start = datetime.combine(day, time(start_hour))
+        window_end = datetime.combine(day, time(end_hour))
+
+        busy = sorted(
+            (t for t in self.tasks_for_day(day) if not t.completed),
+            key=lambda t: t.due.time(),
+        )
+        cursor = window_start
+        for task in busy:
+            start = datetime.combine(day, task.due.time())
+            end = start + timedelta(minutes=task.duration_minutes)
+            if start - cursor >= need:
+                return cursor
+            cursor = max(cursor, end)
+        return cursor if window_end - cursor >= need else None
+
     def detect_conflicts(self) -> list[Conflict]:
         """Return pairs of active tasks whose scheduled time windows overlap."""
         active = [t for t in self.tasks if not t.completed]
@@ -309,3 +408,23 @@ class Scheduler:
         if upcoming is not None:
             self.add_task(upcoming)
         return upcoming
+
+
+# ---------------------------------------------------------------------------
+# Persistence
+# ---------------------------------------------------------------------------
+DATA_FILE = "data.json"
+
+
+def save_to_json(owner: Owner, path: str = DATA_FILE) -> None:
+    """Persist an owner (with all pets and tasks) to a JSON file."""
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(owner.to_dict(), fh, indent=2)
+
+
+def load_from_json(path: str = DATA_FILE) -> Owner:
+    """Load an owner from a JSON file, or return a fresh empty owner if absent."""
+    if not os.path.exists(path):
+        return Owner(name="You")
+    with open(path, "r", encoding="utf-8") as fh:
+        return Owner.from_dict(json.load(fh))

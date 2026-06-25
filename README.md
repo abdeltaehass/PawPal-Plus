@@ -38,8 +38,12 @@ A user of PawPal+ should be able to:
 - 🔁 **Recurring tasks** — daily / weekly / monthly tasks that automatically roll
   to their next occurrence when completed.
 - 📅 **Today & upcoming views** — see what's due today or across the next week.
+- 🕳️ **Next available slot** — suggests the earliest free time that fits a new
+  task within working hours.
+- 💾 **Persistence** — pets and tasks are saved to `data.json` and reloaded
+  between runs.
 - 🖥️ **Two front ends** — a Streamlit web UI (`app.py`) and a CLI demo
-  (`main.py`), both over the same logic layer, with a 17-test `pytest` suite.
+  (`main.py`), both over the same logic layer, with a 21-test `pytest` suite.
 
 ## Architecture
 
@@ -122,34 +126,47 @@ Running `python main.py`:
 ```text
 PawPal+ — Sam's household (2 pets, 5 tasks)
 
-Sorted by Time
---------------
-○  7:30 AM  Morning walk (walk)  [Rex]  ↻daily
-○  8:00 AM  Breakfast (feeding)  [Rex]  ↻daily
-○  8:00 AM  Breakfast (feeding)  [Whiskers]  ↻daily
-○  2:00 PM  Vet checkup (appointment)  [Rex]
-○  7:00 PM  Evening meds (medication)  [Rex]  ↻daily
+Today — sorted by time
+----------------------
+╭────┬─────────┬──────────────┬──────────┬────────────┬──────────┬────────╮
+│    │ Time    │ Task         │ Pet      │ Priority   │ Repeat   │ Done   │
+├────┼─────────┼──────────────┼──────────┼────────────┼──────────┼────────┤
+│ 🐕  │ 7:30 AM │ Morning walk │ Rex      │ Medium     │ daily    │        │
+│ 🥣  │ 8:00 AM │ Breakfast    │ Rex      │ High       │ daily    │        │
+│ 🥣  │ 8:00 AM │ Breakfast    │ Whiskers │ High       │ daily    │        │
+│ 🏥  │ 2:00 PM │ Vet checkup  │ Rex      │ Critical   │ —        │        │
+│ 💊  │ 7:00 PM │ Evening meds │ Rex      │ High       │ daily    │        │
+╰────┴─────────┴──────────────┴──────────┴────────────┴──────────┴────────╯
 
-Filter — Rex's tasks
---------------------
-○  7:00 PM  Evening meds (medication)  [Rex]  ↻daily
-○  7:30 AM  Morning walk (walk)  [Rex]  ↻daily
-○  2:00 PM  Vet checkup (appointment)  [Rex]
-○  8:00 AM  Breakfast (feeding)  [Rex]  ↻daily
+Today — by priority, then time
+------------------------------
+╭────┬─────────┬──────────────┬──────────┬────────────┬──────────┬────────╮
+│    │ Time    │ Task         │ Pet      │ Priority   │ Repeat   │ Done   │
+├────┼─────────┼──────────────┼──────────┼────────────┼──────────┼────────┤
+│ 🏥  │ 2:00 PM │ Vet checkup  │ Rex      │ Critical   │ —        │        │
+│ 🥣  │ 8:00 AM │ Breakfast    │ Rex      │ High       │ daily    │        │
+│ 🥣  │ 8:00 AM │ Breakfast    │ Whiskers │ High       │ daily    │        │
+│ 💊  │ 7:00 PM │ Evening meds │ Rex      │ High       │ daily    │        │
+│ 🐕  │ 7:30 AM │ Morning walk │ Rex      │ Medium     │ daily    │        │
+╰────┴─────────┴──────────────┴──────────┴────────────┴──────────┴────────╯
 
 Conflict Warnings
 -----------------
 ⚠ 8:00 AM: 'Breakfast' overlaps 'Breakfast' (Rex & Whiskers)
+
+Next Available Slot
+-------------------
+Earliest free 45-min slot today: 8:15 AM
 
 Recurring — complete a daily task
 ---------------------------------
 Completed: Morning walk  (Thu 07:30 AM)
 Auto-scheduled: Morning walk  (Fri 07:30 AM)
 
-Filter — by status
-------------------
-Completed: ['Morning walk']
-Pending:   5 tasks
+Persistence
+-----------
+Saved 5 tasks to <tmpdir>/pawpal_demo.json
+Reloaded 5 tasks for 2 pets: ['Rex', 'Whiskers']
 ```
 
 ## Smarter Scheduling
@@ -165,6 +182,36 @@ The `Scheduler` is the algorithmic layer. Each feature maps to a named method in
 | **Filter by status** | `Scheduler.filter_by_status(done)`, `Scheduler.pending()` | Split completed vs. outstanding tasks. |
 | **Conflict detection** | `Scheduler.detect_conflicts()`, `Scheduler.conflict_warnings()` | Flags overlapping time windows via `Task.overlaps_with()` (duration-aware). `conflict_warnings()` returns readable strings and never raises. |
 | **Recurring tasks** | `Task.next_occurrence()`, `Scheduler.complete_task(task)`, `Scheduler.expand_recurring(until)` | Completing a daily/weekly/monthly task auto-schedules its next occurrence using `timedelta`. |
+| **Next available slot** | `Scheduler.next_available_slot(day, minutes)` | Greedy sweep that returns the earliest free start time within working hours, or `None` if the day is full. |
+
+## Optional Extensions
+
+Extra features built on top of the base requirements:
+
+- **Next available slot (Challenge 1).** `Scheduler.next_available_slot(day,
+  duration_minutes, start_hour=8, end_hour=20)` sorts the day's tasks, sweeps a
+  cursor to the end of each commitment, and returns the first gap that fits.
+  See the **Agent Workflow** log in [`ai_interactions.md`](ai_interactions.md).
+- **Data persistence (Challenge 2).** Pets and tasks survive between runs via
+  `save_to_json(owner)` / `load_from_json()` in `pawpal_system.py`. Each model
+  (`Task`/`Pet`/`Owner`) has `to_dict()` / `from_dict()` that convert custom
+  objects to/from plain dicts — enums map to their names/values and `datetime`
+  uses ISO strings — so no external serialization library is needed. **Workflow:**
+  the Streamlit app loads `data.json` on startup and rewrites it after every
+  interaction; the sidebar's *Reset all data* button clears it. *Files modified:*
+  `pawpal_system.py` (serialization + save/load), `app.py` (load/save wiring),
+  `.gitignore` (ignore the runtime `data.json`).
+- **Priority-first scheduling (Challenge 3).** `Task` carries a `Priority`
+  (Low/Medium/High/Critical); `Scheduler.sort_by_priority()` orders by priority
+  first, then time. See the *"Today — by priority"* table in the CLI output above.
+- **Formatted output (Challenge 4).** The CLI uses per-type **emojis**
+  (🐕 🥣 💊 🏥 🛁 📌) and renders schedules as boxed tables with the
+  [`tabulate`](https://pypi.org/project/tabulate/) library (`render()` in
+  `main.py`, `tablefmt="rounded_outline"`); the Streamlit UI mirrors this with
+  `st.metric`, `st.dataframe`, and a consolidated `st.warning`.
+
+AI-collaboration notes for these extensions live in
+[`ai_interactions.md`](ai_interactions.md).
 
 ## Testing PawPal+
 
@@ -188,6 +235,8 @@ The suite (`tests/test_pawpal.py`) covers both happy paths and edge cases:
   the next week, and a one-off task spawns nothing.
 - **Edge cases** — empty pet, owner with no pets, and an empty scheduler all
   behave safely without raising.
+- **Extensions** — `next_available_slot()` finds the first gap and returns
+  `None` on a full day; JSON save/load round-trips owner, pets, and task fields.
 
 Successful run:
 
@@ -195,14 +244,14 @@ Successful run:
 ============================= test session starts ==============================
 platform darwin -- Python 3.14.4, pytest-9.1.1, pluggy-1.6.0
 rootdir: .../PawPal+
-collected 17 items
+collected 21 items
 
-tests/test_pawpal.py .................                                   [100%]
+tests/test_pawpal.py .....................                               [100%]
 
-============================== 17 passed in 0.01s ==============================
+============================== 21 passed in 0.03s ==============================
 ```
 
-**Confidence level: ★★★★☆ (4/5).** All 17 tests pass and cover the core domain
+**Confidence level: ★★★★☆ (4/5).** All 21 tests pass and cover the core domain
 model and every scheduling algorithm, including edge cases. I hold back the
 fifth star because conflict detection compares tasks at their stored `due` time
 rather than across projected recurrences (see reflection §2b), and the suite
@@ -214,8 +263,10 @@ does not yet exercise the Streamlit UI layer end-to-end.
 - [x] **Phase 2** — OOP logic, CLI demo, and initial tests
 - [x] **Phase 3** — Streamlit UI (`app.py`) wired to the logic layer
 - [x] **Phase 4** — Algorithmic layer (sorting, filtering, conflicts, recurrence)
-- [x] **Phase 5** — Automated test suite (17 tests)
+- [x] **Phase 5** — Automated test suite (21 tests)
 - [x] **Phase 6** — UI polish, final UML, and reflection
+- [x] **Extensions** — next-available-slot, JSON persistence, priority
+  scheduling, and formatted (emoji/table) output
 
 ## Design reflections
 

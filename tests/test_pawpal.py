@@ -15,6 +15,8 @@ from pawpal_system import (
     Scheduler,
     Task,
     TaskType,
+    load_from_json,
+    save_to_json,
 )
 
 
@@ -185,3 +187,49 @@ def test_empty_scheduler_is_safe():
     assert scheduler.today() == []
     assert scheduler.detect_conflicts() == []
     assert scheduler.conflict_warnings() == []
+
+
+# ---------------------------------------------------------------------------
+# Optional extensions
+# ---------------------------------------------------------------------------
+def test_next_available_slot_finds_first_gap():
+    """next_available_slot returns the earliest gap that fits the duration."""
+    scheduler = Scheduler([make_task(8, "a", duration=30),
+                           make_task(10, "b", duration=30)])
+    slot = scheduler.next_available_slot(datetime.today().date(), 60)
+    assert slot == at(8, 30)
+
+
+def test_next_available_slot_returns_none_when_full():
+    """A task filling the whole working window leaves no slot."""
+    scheduler = Scheduler([make_task(8, "all day", duration=12 * 60)])
+    assert scheduler.next_available_slot(datetime.today().date(), 30) is None
+
+
+def test_json_round_trip_preserves_data(tmp_path):
+    """save_to_json then load_from_json restores owner, pets, and task fields."""
+    owner = Owner("Sam", "sam@example.com")
+    rex = Pet("Rex", "dog", "Beagle", 4, "good boy")
+    owner.add_pet(rex)
+    rex.add_task(Task("Walk", TaskType.WALK, at(7, 30), 30,
+                      Priority.HIGH, Recurrence.DAILY))
+    path = tmp_path / "data.json"
+
+    save_to_json(owner, str(path))
+    loaded = load_from_json(str(path))
+
+    assert loaded.name == "Sam"
+    assert len(loaded.pets) == 1
+    assert loaded.pets[0].notes == "good boy"
+    task = loaded.all_tasks()[0]
+    assert task.title == "Walk"
+    assert task.priority is Priority.HIGH
+    assert task.recurrence is Recurrence.DAILY
+    assert task.due == at(7, 30)
+
+
+def test_load_from_json_missing_file_returns_empty_owner(tmp_path):
+    """Loading a non-existent file yields a fresh empty owner instead of raising."""
+    owner = load_from_json(str(tmp_path / "nope.json"))
+    assert isinstance(owner, Owner)
+    assert owner.pets == []

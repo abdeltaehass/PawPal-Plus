@@ -1,11 +1,16 @@
 """Command-line demo for PawPal+.
 
 Builds a small household of pets and tasks, then exercises the Scheduler's
-algorithmic layer: sorting, filtering, conflict warnings, and recurring tasks.
-Run with: ``python main.py``.
+algorithmic layer and the optional extensions: priority scheduling, a
+next-available-slot finder, formatted (emoji + table) output, and JSON
+persistence. Run with: ``python main.py``.
 """
 
-from datetime import datetime, time
+import os
+import tempfile
+from datetime import date, datetime, time
+
+from tabulate import tabulate
 
 from pawpal_system import (
     Owner,
@@ -15,7 +20,20 @@ from pawpal_system import (
     Scheduler,
     Task,
     TaskType,
+    load_from_json,
+    save_to_json,
 )
+
+# Challenge 4: an emoji per task type for friendlier output.
+# (Plain double-width emojis chosen so the table columns line up.)
+ICONS = {
+    TaskType.FEEDING: "🥣",
+    TaskType.WALK: "🐕",
+    TaskType.MEDICATION: "💊",
+    TaskType.APPOINTMENT: "🏥",
+    TaskType.GROOMING: "🛁",
+    TaskType.OTHER: "📌",
+}
 
 
 def at(hour: int, minute: int = 0) -> datetime:
@@ -29,6 +47,24 @@ def banner(title: str) -> None:
     print("-" * len(title))
 
 
+def render(tasks: list[Task]) -> str:
+    """Render tasks as a tabulate grid with task-type icons (Challenge 4)."""
+    rows = [
+        [
+            ICONS[t.task_type],
+            t.due.strftime("%I:%M %p").lstrip("0"),
+            t.title,
+            t.pet_name,
+            t.priority.name.title(),
+            "—" if t.recurrence is Recurrence.NONE else t.recurrence.value,
+            "✅" if t.completed else "",
+        ]
+        for t in tasks
+    ]
+    headers = ["", "Time", "Task", "Pet", "Priority", "Repeat", "Done"]
+    return tabulate(rows, headers=headers, tablefmt="rounded_outline")
+
+
 def build_household() -> Owner:
     """Create an owner with two pets and a handful of care tasks."""
     owner = Owner(name="Sam", email="sam@example.com")
@@ -38,7 +74,7 @@ def build_household() -> Owner:
     owner.add_pet(rex)
     owner.add_pet(whiskers)
 
-    # Added deliberately OUT OF ORDER to show sort_by_time() at work.
+    # Added deliberately OUT OF ORDER to show sorting at work.
     rex.add_task(Task("Evening meds", TaskType.MEDICATION, at(19, 0), 5,
                       Priority.HIGH, Recurrence.DAILY))
     rex.add_task(Task("Morning walk", TaskType.WALK, at(7, 30), 30,
@@ -61,20 +97,26 @@ def main() -> None:
     print(f"PawPal+ — {owner.name}'s household "
           f"({len(owner.pets)} pets, {len(owner.all_tasks())} tasks)")
 
-    # --- Sorting: tasks were added out of order ---
-    banner("Sorted by Time")
-    for task in scheduler.sort_by_time():
-        print(task)
+    # --- Sorting by time (tasks were added out of order) ---
+    banner("Today — sorted by time")
+    print(render(scheduler.sort_by_time()))
 
-    # --- Filtering: by pet, then by status ---
-    banner("Filter — Rex's tasks")
-    for task in scheduler.filter_by_pet("Rex"):
-        print(task)
+    # --- Challenge 3: priority-first scheduling ---
+    banner("Today — by priority, then time")
+    print(render(scheduler.sort_by_priority()))
 
     # --- Conflict detection: warnings, not crashes ---
     banner("Conflict Warnings")
     warnings = scheduler.conflict_warnings()
     print("\n".join(warnings) if warnings else "None — schedule is clear.")
+
+    # --- Challenge 1: next available slot ---
+    banner("Next Available Slot")
+    slot = scheduler.next_available_slot(date.today(), duration_minutes=45)
+    if slot:
+        print(f"Earliest free 45-min slot today: {slot:%I:%M %p}".replace(" 0", " "))
+    else:
+        print("No 45-min slot free in working hours today.")
 
     # --- Recurring tasks: completing a daily task rolls it forward ---
     banner("Recurring — complete a daily task")
@@ -83,10 +125,15 @@ def main() -> None:
     print(f"Completed: {walk.title}  ({walk.due:%a %I:%M %p})")
     print(f"Auto-scheduled: {next_walk.title}  ({next_walk.due:%a %I:%M %p})")
 
-    # --- Filtering by status reflects the change ---
-    banner("Filter — by status")
-    print("Completed:", [t.title for t in scheduler.filter_by_status(True)])
-    print(f"Pending:   {len(scheduler.pending())} tasks")
+    # --- Challenge 2: persistence round-trip ---
+    banner("Persistence")
+    path = os.path.join(tempfile.gettempdir(), "pawpal_demo.json")
+    save_to_json(owner, path)
+    reloaded = load_from_json(path)
+    print(f"Saved {len(owner.all_tasks())} tasks to {path}")
+    print(f"Reloaded {len(reloaded.all_tasks())} tasks "
+          f"for {len(reloaded.pets)} pets: {[p.name for p in reloaded.pets]}")
+    os.remove(path)
 
     print()
 
